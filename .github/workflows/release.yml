@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: cr.yandex/<ИД_РЕЕСТРА>
+  REGISTRY: cr.yandex/cr.yandex/crpkqslnrp0k970jh358
   VERSION: ${{ github.run_number }}
 
 jobs:
@@ -17,7 +17,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: 22
 
       - run: npm ci
       - run: npm run lint
@@ -33,7 +33,7 @@ jobs:
           docker build -t $REGISTRY/app:${VERSION} .
           docker tag $REGISTRY/app:${VERSION} $REGISTRY/app:${VERSION}_latest
 
-      - name: Login to Yandex Container Registry
+      - name: kirill
         run: docker login --username oauth --password ${{ secrets.YA_OAUTH_TOKEN }} cr.yandex
 
       - name: Push docker images
