@@ -40,7 +40,7 @@ jobs:
           docker tag $REGISTRY/app:${VERSION} $REGISTRY/app:${VERSION}_latest
 
       - name: Login to Yandex Container Registry
-        run: docker login --username kirill --password ${{ secrets.YA_OAUTH_TOKEN }} cr.yandex
+        run: echo "${{ secrets.YA_OAUTH_TOKEN }}" | docker login --username oauth --password-stdin cr.yandex
 
       - name: Push docker images
         run: |
