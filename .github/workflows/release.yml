@@ -1,5 +1,4 @@
 name: Create Release
-
 on:
   workflow_dispatch:
 
@@ -10,9 +9,10 @@ env:
 jobs:
   release:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch all history for git log
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
@@ -20,11 +20,17 @@ jobs:
           node-version: 22
 
       - run: npm ci
-      - run: npm run lint
-      - run: npm run test
+
+      - name: Run lint and tests in parallel
+        run: |
+          npm run lint &
+          npm run test &
+          wait
 
       - name: Create release branch
         run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
           git checkout -b releases/${{ env.VERSION }}
           git push origin releases/${{ env.VERSION }}
 
@@ -33,7 +39,7 @@ jobs:
           docker build -t $REGISTRY/app:${VERSION} .
           docker tag $REGISTRY/app:${VERSION} $REGISTRY/app:${VERSION}_latest
 
-      - name: kirill
+      - name: Login to Yandex Container Registry
         run: docker login --username oauth --password ${{ secrets.YA_OAUTH_TOKEN }} cr.yandex
 
       - name: Push docker images
@@ -41,27 +47,62 @@ jobs:
           docker push $REGISTRY/app:${VERSION}
           docker push $REGISTRY/app:${VERSION}_latest
 
-      - name: Tag release
+      - name: Create release tag
         run: |
+          git checkout main
           git tag v${VERSION}
           git push origin v${VERSION}
+
+      - name: Get commits since last release
+        id: commits
+        run: |
+          # Get the previous release tag
+          PREV_TAG=$(git describe --tags --abbrev=0 --match="v*" HEAD~1 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            # If no previous tag, get all commits
+            COMMITS=$(git log --oneline --pretty=format:"- %s (%h)")
+          else
+            # Get commits since last tag
+            COMMITS=$(git log ${PREV_TAG}..HEAD --oneline --pretty=format:"- %s (%h)")
+          fi
+
+          echo "commits<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Issue with release info
         run: |
           echo "## Release $VERSION" > release.md
-          echo "Дата: $(date)" >> release.md
-          echo "Автор: ${{ github.actor }}" >> release.md
-          echo "Версия: $VERSION" >> release.md
-          echo "Docker: $REGISTRY/app:${VERSION}" >> release.md
+          echo "" >> release.md
+          echo "**Дата:** $(date)" >> release.md
+          echo "**Автор релиза:** ${{ github.actor }}" >> release.md
+          echo "**Версия:** $VERSION" >> release.md
+          echo "**Docker образ:** \`$REGISTRY/app:${VERSION}\`" >> release.md
+          echo "" >> release.md
+          echo "### Коммиты:" >> release.md
+          echo "${{ steps.commits.outputs.commits }}" >> release.md
+
           gh issue create --title "Release $VERSION" --body-file release.md --repo ${{ github.repository }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update CHANGELOG.md
         run: |
-          echo -e "## v${VERSION} — $(date)\n$(git log $(git describe --tags --abbrev=0)..HEAD --oneline)\n\n$(cat CHANGELOG.md)" > CHANGELOG.md
-          git config user.name github-actions
-          git config user.email github-actions@github.com
+          # Create temporary file with new changelog entry
+          echo "## v${VERSION} — $(date)" > temp_changelog.md
+          echo "" >> temp_changelog.md
+          echo "${{ steps.commits.outputs.commits }}" >> temp_changelog.md
+          echo "" >> temp_changelog.md
+
+          # Prepend to existing changelog if it exists
+          if [ -f CHANGELOG.md ]; then
+            cat CHANGELOG.md >> temp_changelog.md
+          fi
+
+          mv temp_changelog.md CHANGELOG.md
+
+          # Commit and push changelog
           git add CHANGELOG.md
           git commit -m "chore: update changelog for v${VERSION}"
-          git push
+          git push origin main

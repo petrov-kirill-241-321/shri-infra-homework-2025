@@ -8,7 +8,7 @@ on:
         type: string
 
 env:
-  REGISTRY: cr.yandex/crpkqslnrp0k970jh358
+  REGISTRY: cr.yandex/crppnp69v1pqo92i5gqj
   RELEASE_VERSION: ${{ github.event.inputs.release_version }}
   FIX_NUMBER: ${{ github.run_number }}
 
