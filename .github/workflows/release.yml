@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: cr.yandex/crpkqslnrp0k970jh358
+  REGISTRY: cr.yandex/crppnp69v1pqo92i5gqj
   VERSION: ${{ github.run_number }}
 
 jobs:

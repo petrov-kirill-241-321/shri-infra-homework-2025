@@ -1,0 +1,76 @@
+name: Hotfix Release
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Release version to fix"
+        required: true
+        type: string
+
+env:
+  REGISTRY: cr.yandex/crpkqslnrp0k970jh358
+  RELEASE_VERSION: ${{ github.event.inputs.release_version }}
+  FIX_NUMBER: ${{ github.run_number }}
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: releases/${{ env.RELEASE_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - name: Run lint and tests in parallel
+        run: |
+          npm run lint &
+          npm run test &
+          wait
+
+      - name: Build docker image with hotfix tags
+        run: |
+          docker build -t $REGISTRY/app:${RELEASE_VERSION}_fix${FIX_NUMBER} .
+          docker tag $REGISTRY/app:${RELEASE_VERSION}_fix${FIX_NUMBER} $REGISTRY/app:${RELEASE_VERSION}_latest
+
+      - name: Login to Yandex Container Registry
+        run: docker login --username oauth --password ${{ secrets.YA_OAUTH_TOKEN }} cr.yandex
+
+      - name: Push docker images
+        run: |
+          docker push $REGISTRY/app:${RELEASE_VERSION}_fix${FIX_NUMBER}
+          docker push $REGISTRY/app:${RELEASE_VERSION}_latest
+
+      - name: Create hotfix tag
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git tag v${RELEASE_VERSION}_fix${FIX_NUMBER}
+          git push origin v${RELEASE_VERSION}_fix${FIX_NUMBER}
+
+      - name: Find release issue
+        id: find_issue
+        run: |
+          ISSUE_NUMBER=$(gh issue list --search "Release $RELEASE_VERSION in:title" --json number --jq '.[0].number')
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add hotfix comment to release issue
+        if: steps.find_issue.outputs.issue_number != 'null'
+        run: |
+          echo "### Hotfix ${RELEASE_VERSION}_fix${FIX_NUMBER}" > hotfix_comment.md
+          echo "**Дата фикса:** $(date)" >> hotfix_comment.md
+          echo "**Автор фикса:** ${{ github.actor }}" >> hotfix_comment.md
+          echo "**Коммиты:**" >> hotfix_comment.md
+          git log $(git describe --tags --abbrev=0 --match="v${RELEASE_VERSION}*")..HEAD --oneline >> hotfix_comment.md
+          echo "**Docker образ:** \`$REGISTRY/app:${RELEASE_VERSION}_fix${FIX_NUMBER}\`" >> hotfix_comment.md
+
+          gh issue comment ${{ steps.find_issue.outputs.issue_number }} --body-file hotfix_comment.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

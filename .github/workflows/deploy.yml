@@ -1,0 +1,67 @@
+name: Deploy to Production
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Release version to deploy"
+        required: true
+        type: string
+
+env:
+  REGISTRY: cr.yandex/crpkqslnrp0k970jh358
+  RELEASE_VERSION: ${{ github.event.inputs.release_version }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Login to Yandex Container Registry
+        run: docker login --username oauth --password ${{ secrets.YA_OAUTH_TOKEN }} cr.yandex
+
+      - name: Check if image exists
+        run: |
+          docker pull $REGISTRY/app:${RELEASE_VERSION}_latest
+          echo "Image exists and ready for deployment"
+
+      - name: Deploy to production server
+        run: |
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ssh_key
+          chmod 600 ssh_key
+
+          ssh -i ssh_key -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            # Stop existing container if running
+            docker stop shri-app || true
+            docker rm shri-app || true
+            
+            # Login to registry
+            docker login --username oauth --password ${{ secrets.YA_OAUTH_TOKEN }} cr.yandex
+            
+            # Pull and run new image
+            docker pull ${{ env.REGISTRY }}/app:${{ env.RELEASE_VERSION }}_latest
+            docker run -d --name shri-app -p 3000:3000 ${{ env.REGISTRY }}/app:${{ env.RELEASE_VERSION }}_latest
+          EOF
+
+          rm ssh_key
+
+      - name: Find release issue
+        id: find_issue
+        run: |
+          ISSUE_NUMBER=$(gh issue list --search "Release $RELEASE_VERSION in:title" --json number --jq '.[0].number')
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add deployment comment to release issue
+        if: steps.find_issue.outputs.issue_number != 'null'
+        run: |
+          echo "### 🚀 Deployed to Production" > deploy_comment.md
+          echo "**Дата деплоя:** $(date)" >> deploy_comment.md
+          echo "**Автор деплоя:** ${{ github.actor }}" >> deploy_comment.md
+          echo "**Версия:** $RELEASE_VERSION" >> deploy_comment.md
+          echo "**Статус:** ✅ Успешно развернуто" >> deploy_comment.md
+
+          gh issue comment ${{ steps.find_issue.outputs.issue_number }} --body-file deploy_comment.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
