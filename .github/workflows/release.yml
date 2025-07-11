@@ -33,6 +33,9 @@ jobs:
           docker build -t $REGISTRY/app:${VERSION} .
           docker tag $REGISTRY/app:${VERSION} $REGISTRY/app:${VERSION}_latest
 
+      - name: kirill
+        run: docker login --username oauth --password ${{ secrets.YA_OAUTH_TOKEN }} cr.yandex
+
       - name: Push docker images
         run: |
           docker push $REGISTRY/app:${VERSION}
