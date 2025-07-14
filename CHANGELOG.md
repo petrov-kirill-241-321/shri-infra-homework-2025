@@ -1,3 +1,9 @@
+## v11 — Mon Jul 14 11:51:19 UTC 2025
+
+- Merge pull request #2 from petrov-kirill-241-321/testing (0f1af16)
+- testing repo (cbe9b42)
+- chore: update changelog for v10 (143a617)
+
 ## v10 — Fri Jul 11 15:10:52 UTC 2025
 
 - fix Container Registry (69ec663)
