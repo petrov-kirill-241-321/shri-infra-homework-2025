@@ -33,7 +33,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product }) => {
                     <CartBadge id={product.id} />
                 </p>
                 <dl>
-                    <dt>Color</dt>
+                    <dt>Color molor</dt>
                     <dd className={bem("Color", ['text-capitalize'])}>{product.color}</dd>
                     <dt>Material</dt>
                     <dd className={bem("Material", ['text-capitalize'])}>{product.material}</dd>
